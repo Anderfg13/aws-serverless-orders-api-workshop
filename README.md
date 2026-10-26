@@ -293,7 +293,7 @@ lives. Implemented as a relative reference (`/orders/ORD-004`); behind a stage t
 | Question | A — mapping templates | B — proxy + adapter |
 |----------|----------------------|---------------------|
 | **More API Gateway configuration?** | **A**: per method a request template, method responses and integration responses per status code. | B: just resource + method + "proxy on". |
-| **More Java infrastructure code?** | B: routing, event parsing, response building (~150 lines in `lambda/proxy`). A needs less, but still needs input classes and the exception translation. | **B** |
+| **More Java infrastructure code?** | B: routing, event parsing, response building (~190 lines in `lambda/proxy`). A needs less, but still needs input classes and the exception translation. | **B** |
 | **Easier to test locally?** | **B**: everything (status codes, routing, headers) is Java and tested with `mvn test`. In A the templates and status mapping can only be verified in AWS. | **B** |
 | **Where are status codes defined?** | In API Gateway (integration-response regexes). Java only signals a *kind* of error via the message. | In the Java adapter (`OrdersApiHandler`), in code, under version control and tests. |
 | **What if the API grows from 3 to 30 operations?** | 30 × (template + responses) of console config, or a big OpenAPI/IaC document; many Lambdas to deploy and keep consistent. Inconsistencies between routes become likely. | Add routes to the adapter (or split into several adapters/Lambdas, e.g. per resource). API Gateway config stays trivial (or `{proxy+}`). The router may need a real framework/library at that size. |
