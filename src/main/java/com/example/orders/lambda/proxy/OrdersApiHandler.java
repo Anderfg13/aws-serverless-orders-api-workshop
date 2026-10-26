@@ -41,6 +41,7 @@ public class OrdersApiHandler
 
     @Override
     public APIGatewayProxyResponseEvent handleRequest(APIGatewayProxyRequestEvent event, Context context) {
+        logRawEventIfRequested(event, context);
         try {
             return route(event);
         } catch (OrderNotFoundException e) {
@@ -108,6 +109,18 @@ public class OrdersApiHandler
 
     private static APIGatewayProxyResponseEvent methodNotAllowed(String method, String resource) {
         return ApiResponses.error(405, "METHOD_NOT_ALLOWED", method + " is not supported on " + resource);
+    }
+
+    /** Set the environment variable LOG_EVENT=true to inspect the real event in CloudWatch. */
+    private static void logRawEventIfRequested(APIGatewayProxyRequestEvent event, Context context) {
+        if (!"true".equals(System.getenv("LOG_EVENT")) || context == null) {
+            return;
+        }
+        try {
+            context.getLogger().log("EVENT: " + ApiResponses.JSON.writeValueAsString(event));
+        } catch (JsonProcessingException e) {
+            context.getLogger().log("EVENT: <not serializable> " + e.getMessage());
+        }
     }
 
     private static void log(Context context, Exception e) {
