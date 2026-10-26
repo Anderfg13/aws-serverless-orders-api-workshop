@@ -6,7 +6,8 @@ A small Order Management REST API implemented in Java 17 and exposed through Ama
 * **Architecture A** — API Gateway *mapping templates* (non-proxy integration), one Lambda per operation.
 * **Architecture B** — Lambda *proxy integration* with a thin HTTP adapter, one Lambda for the whole API.
 
-> Items marked **TODO (AWS)** depend on observations from the deployed system; fill them in after following
+> **Demo video** (≈5 min: `mvn test` / `mvn package`, `curl` against the deployed API, architecture diagram):
+> [docs/demo/demo.mp4](docs/demo/demo.mp4). To reproduce the deployment see
 > [docs/AWS_STEP_BY_STEP.md](docs/AWS_STEP_BY_STEP.md).
 
 ## Contents
@@ -154,7 +155,7 @@ Storage is in memory and **not persistent**: a Lambda execution environment is e
 * *Does it require Spring Boot?* No. Plain Java + Maven + Jackson (only in the HTTP adapter).
 * *What does the generated JAR contain?* The compiled classes of this project plus, thanks to `maven-shade-plugin`, its
   runtime dependencies (`aws-lambda-java-core`, `aws-lambda-java-events`, Jackson, joda-time) — a *fat JAR*, because Lambda
-  does not resolve Maven dependencies. ![jar contents](docs/images/03-jar-contents.png)
+  does not resolve Maven dependencies.
 * *Which parts know about HTTP?* Only `lambda.proxy.OrdersApiHandler` and `ApiResponses`. `domain`, `application` and
   `infrastructure` have no HTTP or AWS imports (the Architecture A handlers know AWS's `RequestHandler`, but not HTTP).
 
@@ -165,9 +166,20 @@ Storage is in memory and **not persistent**: a Lambda execution environment is e
 `orders-create` runs `com.example.orders.lambda.mapping.CreateOrderHandler::handleRequest` on the Java 17 runtime,
 invoked manually from the console with the JSON in [`events/direct/`](events/direct).
 
-![create macbook](docs/images/05-lambda-create-macbook.png)
-![create keyboard](docs/images/06-lambda-create-keyboard.png)
-![create invalid](docs/images/07-lambda-create-invalid.png)
+Console tests of the deployed functions (account data masked):
+
+| `orders-get` · `{"id":"ORD-001"}` → order | `orders-get` · `{"id":"ORD-999"}` → `ORDER_NOT_FOUND` |
+|---|---|
+| ![get existing](docs/images/08-lambda-get-existing.png) | ![get missing](docs/images/09-lambda-get-missing.png) |
+
+| `orders-find` · `CUST-42` → 2 orders | `orders-find` · `CUST-100` → `[]` |
+|---|---|
+| ![find CUST-42](docs/images/08b-lambda-find-cust-42.png) | ![find CUST-100](docs/images/09b-lambda-find-cust-100.png) |
+
+`orders-create` with `quantity: 0` is rejected; the CloudWatch log of the function shows the `INVALID_ORDER` error
+(`quantity must be greater than zero`):
+
+![create invalid in CloudWatch](docs/images/07-cloudwatch-create-invalid.png)
 
 **How does the Lambda Java runtime convert JSON to Java objects and back?**
 
@@ -178,8 +190,11 @@ serializer bundled in the runtime: it needs a public no-argument constructor and
 `List<Order>` is serialized as a JSON array. If the handler throws, the runtime returns
 `{"errorMessage": ..., "errorType": ..., "stackTrace": [...]}` instead.
 
-> **TODO (AWS):** verify against the deployed function and write down what you observed, e.g. the behavior with an unknown
-> field, `"quantity": "abc"`, a missing field (primitive `int` becomes `0`), and the shape of the error JSON.
+**Observed in the deployed functions:** when a handler throws, the console shows `Executing function: failed` with
+`errorMessage` (here the JSON string `{"error":"ORDER_NOT_FOUND","message":"Order ORD-999 does not exist"}`),
+`errorType` (`com.example.orders.lambda.mapping.MappedApiException`) and a `stackTrace` array, exactly the shape described
+above. Successful calls return the bean (or the `List<Order>`) as plain JSON. Edge cases such as unknown fields or
+`"quantity": "abc"` were not exercised in the console; the unit tests cover the validation rules.
 
 **Checkpoint 2 — actual data flow**
 
@@ -219,14 +234,24 @@ Status codes are chosen by API Gateway: a Lambda cannot return a status in this 
 
 Templates are in [`aws/mapping-templates/`](aws/mapping-templates). Screenshots:
 
+![A resources](docs/images/17-apigw-a-resources.png)
 ![A integration request](docs/images/10-apigw-get-integration-request.png)
 ![A integration response](docs/images/11-apigw-get-integration-response.png)
-![A resources](docs/images/17-apigw-a-resources.png)
+
+`curl` against stage `dev`:
+
 ![A GET 200](docs/images/12-curl-a-get-200.png)
 ![A GET 404](docs/images/13-curl-a-get-404.png)
-![A find](docs/images/14-curl-a-find.png)
+![A find CUST-42](docs/images/14-curl-a-find-cust-42.png)
+![A find CUST-100](docs/images/14b-curl-a-find-cust-100.png)
 ![A POST 201](docs/images/15-curl-a-post-201.png)
 ![A POST 400](docs/images/16-curl-a-post-400.png)
+
+**Observed gap:** `GET /orders?customerId=` (empty value) returned `HTTP 200` whose body is the raw Lambda error JSON
+(`errorMessage` … `INVALID_ORDER`) instead of a `400`. That method only got the default `200` integration response, so the
+error was not translated. This is the kind of per-method configuration that Architecture B avoids.
+
+![A find without customerId](docs/images/16b-curl-a-find-missing-customer.png)
 
 **Checkpoint 3 — what is API Gateway responsible for in Architecture A?**
 
@@ -270,14 +295,23 @@ It also sets `Content-Type` and `Location` (on `201`).
 | Headers | `headers` (and `multiValueHeaders`) |
 | Request body | `body` (a **string**; `isBase64Encoded` tells if it is binary) |
 
-> The files in `events/proxy/` are hand-written following the documented schema. **TODO (AWS):** replace with the real event
-> from CloudWatch (set `LOG_EVENT=true` on the function) ![event](docs/images/23-cloudwatch-proxy-event.png)
+> The files in `events/proxy/` are hand-written following the documented schema; the real event can be logged by setting
+> `LOG_EVENT=true` on the function and reading it in CloudWatch.
 
 ![B resources](docs/images/18-apigw-b-resources.png)
+
+**First attempt (misconfigured integration).** The first calls to `orders-api-proxy` returned `HTTP 200` with a body like
+`{"statusCode":404,...,"message":"No route for null null"}`: the Lambda ran, but it received an event without
+`httpMethod`/`path` and API Gateway wrapped the adapter's response instead of unwrapping it, i.e. the method was not using
+the Lambda **proxy** integration. After fixing the integration and redeploying the stage (`dev2`), the same calls behave as
+expected. The call that failed:
+
+![B first attempt](docs/images/18b-curl-b-first-attempt-route-not-found.png)
+
+Working calls against stage `dev2` (frames taken from the [demo video](docs/demo/demo.mp4)):
+
 ![B GET 200](docs/images/19-curl-b-get-200.png)
 ![B GET 404](docs/images/20-curl-b-get-404.png)
-![B POST 201 with Location](docs/images/21-curl-b-post-201-location.png)
-![B POST 400](docs/images/22-curl-b-post-400.png)
 
 Because the adapter is just a Java class, it is tested locally with hand-built events
 (`OrdersApiHandlerTest`, 15 tests): all status codes, `Location`, malformed JSON, unknown routes and a simulated
@@ -390,12 +424,15 @@ The prediction was written and committed **before** implementing: [docs/delete-p
 | Where is 204/404 decided? | HTTP adapter | Same: service throws `OrderNotFoundException`; adapter returns `204` or maps to `404` |
 | Tests | service + adapter tests | 4 service tests + 3 adapter tests |
 
-**Comparison with the agent's proposal:** *TODO — write what the agent proposed before implementing and how it
-differed from your prediction (if you prompted it separately), or note that the agent followed the prediction.*
+**Comparison with the agent's proposal:** the prediction was committed first (`docs: record DELETE /orders/{id} prediction
+before implementing`) and the agent then implemented the feature against it; the only deviation is the one in the table
+above (the test double that had to implement the new repository method).
 
-Demo: ![DELETE method](docs/images/24-apigw-b-delete-method.png)
+Demo against the deployed proxy API (`DELETE` on `/orders/ORD-003`, then a second `DELETE` and a `GET` confirm it is gone):
+
 ![DELETE 204](docs/images/25-curl-b-delete-204.png)
 ![DELETE 404](docs/images/26-curl-b-delete-404.png)
+![GET after DELETE 404](docs/images/26b-curl-b-get-after-delete-404.png)
 
 Note that, as an architectural consequence, adding `DELETE` to Architecture A would have required a new Lambda *and* a new
 method, mapping template and 3–4 response configurations; in B it was one `case` in a `switch` and one console method.
@@ -442,7 +479,7 @@ environment (two environments can generate the same `ORD-004`). A real system wo
 │   ├── delete-prediction.md     final-challenge prediction (committed before the feature)
 │   ├── examples.md              example requests/responses
 │   ├── AWS_STEP_BY_STEP.md      how to reproduce the deployment
-│   ├── SCREENSHOTS_CHECKLIST.md which screenshots to take
+│   ├── demo/                    demo video
 │   └── images/                  screenshots used by this README
 ├── events/
 │   ├── direct/                  JSON for manual Lambda invocation
