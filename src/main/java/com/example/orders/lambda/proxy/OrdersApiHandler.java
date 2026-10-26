@@ -70,6 +70,7 @@ public class OrdersApiHandler
         if (ORDER_BY_ID.equals(resource)) {
             return switch (method) {
                 case "GET" -> getOrder(event);
+                case "DELETE" -> deleteOrder(event);
                 default -> methodNotAllowed(method, resource);
             };
         }
@@ -83,6 +84,11 @@ public class OrdersApiHandler
 
     private APIGatewayProxyResponseEvent getOrder(APIGatewayProxyRequestEvent event) {
         return ApiResponses.json(200, service.getOrder(pathParameter(event, "id")));
+    }
+
+    private APIGatewayProxyResponseEvent deleteOrder(APIGatewayProxyRequestEvent event) {
+        service.deleteOrder(pathParameter(event, "id"));
+        return ApiResponses.noContent();
     }
 
     private APIGatewayProxyResponseEvent findOrders(APIGatewayProxyRequestEvent event) {

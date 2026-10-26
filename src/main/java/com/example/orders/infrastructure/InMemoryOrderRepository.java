@@ -51,6 +51,11 @@ public class InMemoryOrderRepository implements OrderRepository {
     }
 
     @Override
+    public boolean deleteById(String id) {
+        return orders.remove(id) != null;
+    }
+
+    @Override
     public String nextId() {
         return String.format("ORD-%03d", sequence.incrementAndGet());
     }

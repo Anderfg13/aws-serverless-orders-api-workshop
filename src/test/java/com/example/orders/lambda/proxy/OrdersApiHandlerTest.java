@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 /** The HTTP adapter tested locally with hand-built API Gateway events (no AWS needed). */
 class OrdersApiHandlerTest {
@@ -92,6 +93,37 @@ class OrdersApiHandlerTest {
     }
 
     @Test
+    void deleteExistingOrderReturns204WithEmptyBody() {
+        APIGatewayProxyResponseEvent response = handler.handleRequest(
+                request("DELETE", "/orders/{id}", "/orders/ORD-001").withPathParameters(Map.of("id", "ORD-001")),
+                null);
+
+        assertEquals(204, response.getStatusCode());
+        assertNull(response.getBody());
+    }
+
+    @Test
+    void deleteMissingOrderReturns404() throws Exception {
+        APIGatewayProxyResponseEvent response = handler.handleRequest(
+                request("DELETE", "/orders/{id}", "/orders/ORD-999").withPathParameters(Map.of("id", "ORD-999")),
+                null);
+
+        assertEquals(404, response.getStatusCode());
+        assertEquals("ORDER_NOT_FOUND", json(response).get("error").asText());
+    }
+
+    @Test
+    void getAfterDeleteReturns404() {
+        Map<String, String> id = Map.of("id", "ORD-001");
+        handler.handleRequest(request("DELETE", "/orders/{id}", "/orders/ORD-001").withPathParameters(id), null);
+
+        APIGatewayProxyResponseEvent response = handler.handleRequest(
+                request("GET", "/orders/{id}", "/orders/ORD-001").withPathParameters(id), null);
+
+        assertEquals(404, response.getStatusCode());
+    }
+
+    @Test
     void searchReturnsCustomerOrders() throws Exception {
         APIGatewayProxyResponseEvent response = handler.handleRequest(
                 request("GET", "/orders", "/orders").withQueryStringParameters(Map.of("customerId", "CUST-42")),
@@ -149,6 +181,10 @@ class OrdersApiHandlerTest {
             }
 
             public List<Order> findByCustomerId(String customerId) {
+                throw new IllegalStateException("secret internal detail");
+            }
+
+            public boolean deleteById(String id) {
                 throw new IllegalStateException("secret internal detail");
             }
 

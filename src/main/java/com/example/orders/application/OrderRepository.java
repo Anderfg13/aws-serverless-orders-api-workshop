@@ -14,6 +14,9 @@ public interface OrderRepository {
 
     List<Order> findByCustomerId(String customerId);
 
+    /** @return true if an order was removed, false if it did not exist */
+    boolean deleteById(String id);
+
     /** Next identifier, e.g. ORD-004. */
     String nextId();
 }
