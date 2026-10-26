@@ -6,3 +6,4 @@ target/
 .vscode/
 .DS_Store
 .metals/
+docs/SCREENSHOTS_CHECKLIST.md
