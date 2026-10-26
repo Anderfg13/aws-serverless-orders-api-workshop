@@ -7,7 +7,7 @@ A small Order Management REST API implemented in Java 17 and exposed through Ama
 * **Architecture B** — Lambda *proxy integration* with a thin HTTP adapter, one Lambda for the whole API.
 
 > **Demo video** (≈5 min: `mvn test` / `mvn package`, `curl` against the deployed API, architecture diagram):
-> [docs/demo/demo.mp4](docs/demo/demo.mp4). To reproduce the deployment see
+> [YouTube](https://youtu.be/DiQKXY4fv_o) · [local copy: docs/demo/demo.mp4](docs/demo/demo.mp4). To reproduce the deployment see
 > [docs/AWS_STEP_BY_STEP.md](docs/AWS_STEP_BY_STEP.md).
 
 ## Contents
@@ -308,7 +308,7 @@ expected. The call that failed:
 
 ![B first attempt](docs/images/18b-curl-b-first-attempt-route-not-found.png)
 
-Working calls against stage `dev2` (frames taken from the [demo video](docs/demo/demo.mp4)):
+Working calls against stage `dev2` (frames taken from the [demo video](https://youtu.be/DiQKXY4fv_o)):
 
 ![B GET 200](docs/images/19-curl-b-get-200.png)
 ![B GET 404](docs/images/20-curl-b-get-404.png)
