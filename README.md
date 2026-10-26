@@ -56,7 +56,7 @@ flowchart LR
     end
 
     Client -- "HTTP request" --> APIGW
-    APIGW -- "A: mapped JSON event<br/>{ &quot;id&quot;: &quot;ORD-1&quot; }" --> LA1
+    APIGW -- "A: mapped JSON event<br/>(only the id)" --> LA1
     APIGW -- "B: full proxy event" --> LB1
     LA1 --> SVC
     LB1 --> SVC
