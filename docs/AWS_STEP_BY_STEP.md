@@ -4,9 +4,6 @@ Todo lo de Java ya está hecho y probado localmente. Esta guía cubre lo que se 
 Usa **una sola región** durante todo el laboratorio (ej. `us-east-1`) y **REST API** en API Gateway
 (no "HTTP API": solo REST API soporta mapping templates / integración no-proxy).
 
-Las capturas que debes tomar en cada paso están marcadas con 📸 y listadas con su nombre de archivo en
-[SCREENSHOTS_CHECKLIST.md](SCREENSHOTS_CHECKLIST.md).
-
 ---
 
 ## Paso 0 — Construir el JAR
@@ -17,8 +14,6 @@ mvn package
 ```
 
 El archivo a subir es `target/orders-api-1.0.0.jar` (≈3.4 MB, es un fat JAR con las dependencias).
-📸 01-mvn-test, 02-mvn-package
-
 ---
 
 ## Parte II — Una función Lambda invocada manualmente
@@ -27,7 +22,8 @@ El archivo a subir es `target/orders-api-1.0.0.jar` (≈3.4 MB, es un fat JAR co
    * Name: `orders-create`
    * Runtime: **Java 17**
    * Architecture: x86_64
-   * Permissions: dejar el rol por defecto (crea uno con permisos básicos de logs).
+   * Permissions: **Change default execution role → Use an existing role → `LabRole`**.
+     (En AWS Academy / Learner Lab no se permite `iam:CreateRole`; dejar el rol por defecto falla con "not authorized to perform: iam:CreateRole".)
 2. En la pestaña **Code** → *Upload from* → **.zip or .jar file** → sube `target/orders-api-1.0.0.jar`.
 3. En **Code → Runtime settings → Edit**, Handler:
    `com.example.orders.lambda.mapping.CreateOrderHandler::handleRequest`
@@ -35,10 +31,10 @@ El archivo a subir es `target/orders-api-1.0.0.jar` (≈3.4 MB, es un fat JAR co
    (Java en arranque en frío es lento con 128 MB).
 5. Pestaña **Test** → *Create new event* → pega el contenido de
    [`events/direct/create-order-macbook.json`](../events/direct/create-order-macbook.json) → **Test**.
-   📸 05-lambda-create-macbook (resultado JSON con `id`, etc.)
+
 6. Repite con otro valor: `events/direct/create-order-keyboard.json`, y con
    `events/direct/create-order-invalid.json` (debe fallar: mira `errorMessage`).
-   📸 06-lambda-create-keyboard, 07-lambda-create-invalid
+
 7. Abre el log en CloudWatch (botón *View CloudWatch logs*) y fíjate en la línea `REPORT` (duración, memoria).
 
 **Investigación (para el README):** el runtime de Lambda para Java deserializa el JSON al tipo del primer
@@ -60,7 +56,7 @@ Repite el procedimiento anterior (mismo JAR, Java 17, 512 MB, 15 s):
 | `orders-find` | `com.example.orders.lambda.mapping.FindOrdersHandler::handleRequest` |
 
 Pruébalas con `events/direct/get-order-existing.json`, `get-order-missing.json`, `find-orders-cust-42.json`,
-`find-orders-cust-100.json`. 📸 08-lambda-get-existing, 09-lambda-get-missing
+`find-orders-cust-100.json`.
 
 > Nota: cada función es un entorno aislado; una orden creada en `orders-create` **no** existe en `orders-get`.
 > Por eso hay órdenes de ejemplo precargadas (`ORD-001`, `ORD-002` de `CUST-42` y `ORD-003` de `CUST-7`).
@@ -82,7 +78,7 @@ Pruébalas con `events/direct/get-order-existing.json`, `get-order-missing.json`
    ```
    { "id": "$input.params('id')" }
    ```
-   📸 10-apigw-get-integration-request
+
 3. **Method response**: añade los códigos **404**, **400** y **500** (el **200** ya existe).
 4. **Integration response**: la fila por defecto (200) se queda con regex vacío. **Create response** para cada error:
 
@@ -93,7 +89,7 @@ Pruébalas con `events/direct/get-order-existing.json`, `get-order-missing.json`
    | 500 | `.*INTERNAL_ERROR.*` | `$input.path('$.errorMessage')` |
 
    (contenido en [`aws/mapping-templates/error.response.vtl`](../aws/mapping-templates/error.response.vtl))
-   📸 11-apigw-get-integration-response
+
 5. Pestaña **Test** de la consola: Path `{id}` = `ORD-001` → 200; `ORD-999` → 404.
 
 ### A.4 `GET /orders?customerId=` → `orders-find`
@@ -125,7 +121,7 @@ Pruébalas con `events/direct/get-order-existing.json`, `get-order-missing.json`
 **Deploy API** → *New stage* `dev`. Copia la *Invoke URL*.
 
 ```bash
-URL=https://XXXX.execute-api.REGION.amazonaws.com/dev
+URL=https://u51q1hfu7e.execute-api.us-east-1.amazonaws.com/dev
 
 curl -i "$URL/orders/ORD-001"                      # 200
 curl -i "$URL/orders/ORD-999"                      # 404 ORDER_NOT_FOUND
@@ -137,8 +133,6 @@ curl -i -X POST "$URL/orders" -H "Content-Type: application/json" \
 curl -i -X POST "$URL/orders" -H "Content-Type: application/json" \
      -d '{"customerId":"CUST-42","product":"MacBook Air","quantity":0}'   # 400
 ```
-
-📸 12-curl-a-get-200, 13-curl-a-get-404, 14-curl-a-find, 15-curl-a-post-201, 16-curl-a-post-400, 17-apigw-a-resources
 
 Si algo sale `500 Internal server error` sin cuerpo útil: revisa que *Request body passthrough* no impida el template,
 y revisa los logs de la función en CloudWatch.
@@ -164,14 +158,12 @@ y revisa los logs de la función en CloudWatch.
    * `/orders` → `POST`, `GET`
    * `/orders/{id}` → `GET` (el `DELETE` se añade en el paso final)
 4. No configures mapping templates ni method/integration responses: aquí no hacen falta.
-5. **Deploy API** → stage `prod`.
-
-📸 18-apigw-b-resources
+5. **Deploy API** → stage `dev2`.
 
 ### B.3 Probar y capturar el evento real
 
 ```bash
-URL=https://YYYY.execute-api.REGION.amazonaws.com/prod
+URL=https://pz27uxbj89.execute-api.us-east-1.amazonaws.com/dev2
 
 curl -i "$URL/orders/ORD-001"                      # 200
 curl -i "$URL/orders/ORD-999"                      # 404
@@ -182,11 +174,9 @@ curl -i -X POST "$URL/orders" -H "Content-Type: application/json" -d '{"customer
 curl -i -X POST "$URL/orders" -H "Content-Type: application/json" -d '{no es json'              # 400 INVALID_JSON
 ```
 
-📸 19-curl-b-get-200, 20-curl-b-get-404, 21-curl-b-post-201-location, 22-curl-b-post-400
-
 Ve a **CloudWatch → Log groups → /aws/lambda/orders-api-proxy** y busca la línea `EVENT: {...}`.
 Copia ese JSON real, formatéalo y **reemplaza** el contenido de `events/proxy/*.json` si quieres (los de este repo son un ejemplo
-escrito a mano siguiendo el esquema documentado). 📸 23-cloudwatch-proxy-event
+escrito a mano siguiendo el esquema documentado).
 
 En el README identifica dónde está: método (`httpMethod`), ruta (`path`/`resource`), `pathParameters`,
 `queryStringParameters`, `headers` y `body`.
@@ -199,7 +189,7 @@ En el README identifica dónde está: método (`httpMethod`), ruta (`path`/`reso
 2. En Lambda `orders-api-proxy` → **Upload from** `.jar` y sube el nuevo JAR.
 3. En la API `orders-api-proxy` → recurso `/orders/{id}` → **Create method** → `DELETE`, **Lambda proxy ON**,
    función `orders-api-proxy`.
-4. **Deploy API** al stage `prod` (¡sin redeploy el método nuevo no existe!).
+4. **Deploy API** al stage `dev2` (¡sin redeploy el método nuevo no existe!).
 5. Probar (ojo: el estado es en memoria; si el entorno se reinicia, `ORD-001` vuelve a existir):
 
 ```bash
@@ -207,8 +197,6 @@ curl -i -X DELETE "$URL/orders/ORD-003"      # 204 sin cuerpo
 curl -i -X DELETE "$URL/orders/ORD-003"      # 404 ORDER_NOT_FOUND
 curl -i "$URL/orders/ORD-003"                # 404 (confirma el borrado)
 ```
-
-📸 24-apigw-b-delete-method, 25-curl-b-delete-204, 26-curl-b-delete-404
 
 Compara lo que necesitaste cambiar con lo que predijiste en [delete-prediction.md](delete-prediction.md).
 
@@ -221,13 +209,6 @@ El 500 no es fácil de provocar a propósito en AWS sin romper el código. Lo de
 `500 INTERNAL_ERROR` con mensaje genérico y deja el detalle solo en CloudWatch. Explícalo en el video al mostrar los tests.
 
 ---
-
-## Video de demostración (checklist)
-
-1. `mvn test` y `mvn package` en la terminal.
-2. Invocar una Lambda directamente desde la consola (Test).
-3. `curl` a la API desplegada: POST 201, GET 200, GET 404, POST 400, DELETE 204 (y 404).
-4. Mostrar el diagrama de arquitectura del README.
 
 ## Limpieza al terminar
 
