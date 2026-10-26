@@ -1,0 +1,26 @@
+{
+  "resource": "/orders",
+  "path": "/orders",
+  "httpMethod": "GET",
+  "headers": {
+    "Accept": "*/*",
+    "Host": "abc123.execute-api.us-east-1.amazonaws.com",
+    "User-Agent": "curl/8.4.0"
+  },
+  "queryStringParameters": {
+    "customerId": "CUST-42"
+  },
+  "multiValueQueryStringParameters": {
+    "customerId": ["CUST-42"]
+  },
+  "pathParameters": null,
+  "stageVariables": null,
+  "requestContext": {
+    "resourcePath": "/orders",
+    "httpMethod": "GET",
+    "path": "/prod/orders",
+    "stage": "prod"
+  },
+  "body": null,
+  "isBase64Encoded": false
+}
